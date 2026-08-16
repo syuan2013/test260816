@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>水陸大冒險：運動神經挑戰賽</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-image: linear-gradient(rgba(224, 242, 254, 0.35), rgba(240, 253, 244, 0.35)), url('水陸小高手.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            overflow-x: hidden;
+            touch-action: manipulation;
+            position: relative;
+        }
+
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.75); /* 白色半透明遮罩 */
+            z-index: -1; /* 確保遮罩在內容下方，但在背景圖片上方 */
+        }
+
+        .board-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            position: relative;
+            transition: transform 0.2s;
+            border: 3px solid transparent;
+        }
+
+        .cell.active {
+            border-color: #3b82f6;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+
+        .cell-start { background-color: #fef08a; border-color: #eab308; }
+        .cell-end { background-color: #bbf7d0; border-color: #22c55e; }
+        .cell-question { background-color: #f0fdf4; border-color: #4ade80; }
+        .cell-chance { background-color: #fdf4ff; border-color: #d946ef; }
+        .cell-fate { background-color: #fff1f2; border-color: #f43f5e; }
+
+        .player-token {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 10;
+        }
+        .player-token-0 { background: #ef4444; } /* 紅隊 */
+        .player-token-1 { background: #3b82f6; } /* 藍隊 */
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            max-width: 90%;
+            width: 500px;
+            transform: scale(0.9);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+
+        .option-btn {
+            width: 100%;
+            text-align: left;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            border-radius: 0.75rem;
+            border: 2px solid #e5e7eb;
+            background: #f9fafb;
+            transition: all 0.2s;
+            font-size: 1.1rem;
+        }
+
+        .option-btn:hover {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .option-btn.correct { background: #dcfce7; border-color: #22c55e; color: #166534; }
+        .option-btn.wrong { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
+
+        /* Dice Animation */
+        @keyframes roll {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.2); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+        .rolling { animation: roll 0.6s ease-in-out; }
+
+        /* Confetti for win */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="bg-blue-600 text-white p-4 shadow-lg sticky top-0 z-20">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl md:text-3xl font-black flex items-center gap-2">
+                <i class="fa-solid fa-water"></i> 水陸大冒險 <i class="fa-solid fa-person-skating"></i>
+            </h1>
+            <div class="text-lg font-bold bg-blue-700 px-4 py-2 rounded-full flex gap-4">
+                <span id="score-0" class="text-red-300">紅隊: 起點</span>
+                <span id="score-1" class="text-blue-300">藍隊: 起點</span>
+            </div>
+            <button id="music-btn" type="button" onclick="toggleBgm()" class="bg-blue-700 hover:bg-blue-800 px-3 py-2 rounded-full" aria-label="播放背景音樂">
+                <i class="fa-solid fa-volume-xmark"></i>
+            </button>
+        </div>
+    </header>
+
+    <audio id="bgm" loop preload="metadata">
+        <source src="Board%20Game%20Blues.mp3" type="audio/mpeg">
+    </audio>
+
+    <main class="flex-grow flex flex-col items-center justify-center p-4 relative">
+        
+        <!-- Game Controls -->
+        <div class="mb-6 flex flex-col items-center bg-white p-6 rounded-2xl shadow-xl w-full max-w-sm border-4 border-red-400" id="control-panel">
+            <div class="text-xl font-bold mb-2 text-gray-700" id="turn-indicator">現在輪到：紅隊</div>
+            <div id="dice-container" class="text-6xl text-red-500 mb-4 cursor-pointer" onclick="rollDice()">
+                <i class="fa-solid fa-dice-d6"></i>
+            </div>
+            <button id="roll-btn" onclick="rollDice()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105 active:scale-95 w-full">
+                紅隊 擲骰子前進！
+            </button>
+            <p id="roll-result" class="mt-3 text-lg font-bold text-gray-700 h-6"></p>
+        </div>
+
+        <!-- Board Grid -->
+        <div class="relative w-full overflow-x-auto pb-4">
+            <div id="board" class="board-grid min-w-[600px]">
+                <!-- Cells will be generated by JS -->
+            </div>
+            <div id="player-0" class="player-token player-token-0" title="紅隊">
+                <i class="fa-solid fa-child-reaching"></i>
+            </div>
+            <div id="player-1" class="player-token player-token-1" title="藍隊">
+                <i class="fa-solid fa-person-skating"></i>
+            </div>
+        </div>
+    </main>
+
+    <!-- Question/Event Modal -->
+    <div id="action-modal" class="modal-overlay">
+        <div class="modal-content relative border-t-8 border-blue-500">
+            <div id="modal-icon" class="absolute -top-10 left-1/2 transform -translate-x-1/2 text-5xl text-blue-500 bg-white rounded-full p-2 shadow-md">
+                <i class="fa-solid fa-circle-question"></i>
+            </div>
+            <h2 id="modal-title" class="text-2xl font-black mb-4 mt-4 text-center text-gray-800">挑戰題</h2>
+            <p id="modal-desc" class="text-lg mb-6 text-gray-700 leading-relaxed"></p>
+            <div id="modal-options" class="flex flex-col gap-2">
+                <!-- Options injected here -->
+            </div>
+            <div id="modal-action-btn-container" class="hidden mt-6 flex justify-center">
+                <button id="modal-action-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full text-lg w-full">
+                    確定
+                </button>
+            </div>
+            <p id="feedback-msg" class="text-center font-bold text-lg mt-4 h-6"></p>
+        </div>
+    </div>
+
+    <!-- Final Boss Modal -->
+    <div id="boss-modal" class="modal-overlay">
+        <div class="modal-content border-t-8 border-purple-600 bg-purple-50">
+            <h2 class="text-3xl font-black mb-4 text-center text-purple-800 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-crown text-yellow-500"></i> 終點大考驗
+            </h2>
+            <p id="winner-announcement" class="text-2xl mb-4 font-bold text-red-600 text-center">恭喜 紅隊 率先抵達終點！</p>
+            <p class="text-md mb-6 text-gray-700 bg-white p-4 rounded-lg shadow-inner">
+                《水陸小高手》兩首詩中，你最喜歡哪一個運動的哪一句？請大聲說出你的理由！
+            </p>
+            <textarea id="boss-answer" class="w-full p-3 border-2 border-purple-300 rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 focus:border-transparent" rows="3" placeholder="我最喜歡...因為..."></textarea>
+            <button onclick="finishGame()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg w-full transform transition hover:scale-105">
+                送出並完成遊戲！
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 遊戲資料與題庫 ---
+        
+        // 擴充字詞與文意題庫 (階段一 & 二)
+        const questionBank = [
+            { type: 'q', q: "請選出『遨遊』的正確國字與部首。", options: ["(A) 熬遊／灬部", "(B) 遨遊／辶部", "(C) 遨遊／方部"], ans: 1 },
+            { type: 'q', q: "詩人形容游泳時『游出多采多姿的人生』，『多采多姿』的意思是？", options: ["(A) 單調乏味", "(B) 豐富而變化多端", "(C) 慌亂不安"], ans: 1 },
+            { type: 'q', q: "下列哪一句**沒有**使用譬喻法？", options: ["(A) 游成自由的魚", "(B) 想像自己是隻飛鷹", "(C) 歡樂笑聲一陣陣"], ans: 2 },
+            { type: 'q', q: "找出游泳一詩中，運用『頂針』修辭的句子。", options: ["(A) 游成自由的魚／游成巨大的蛙", "(B) 晶亮水珠一串串，化成歡樂的笑聲", "(C) 游出無比堅定的自信"], ans: 1 },
+            { type: 'q', q: "在《溜直排輪》中，汗水是怎麼滴落的？", options: ["(A) 緩緩滴落", "(B) 快速滑落", "(C) 輕輕飄落"], ans: 0 },
+            { type: 'q', q: "詩中溜直排輪時，『陽光』在哪裡輕輕晃動？", options: ["(A) 水面上", "(B) 枝頭上", "(C) 臉頰上"], ans: 1 },
+            { type: 'q', q: "『天寬地大，任我遨遊』，這句話傳達了什麼樣的心情？", options: ["(A) 害怕", "(B) 自由自在", "(C) 難過"], ans: 1 },
+            { type: 'q', q: "《游泳》詩中提到『游出大海一般的____』？", options: ["(A) 壯志", "(B) 自信", "(C) 快樂"], ans: 0 },
+            { type: 'q', q: "『舞姿迷人，美麗如虹』是形容自己像什麼一樣轉動？", options: ["(A) 飛鷹", "(B) 陀螺", "(C) 飛蝶"], ans: 1 },
+            { type: 'q', q: "請選出讀音正確的字：『陀』螺", options: ["(A) ㄊㄨㄛˊ", "(B) ㄊㄨㄛ", "(C) ㄉㄨㄛˋ"], ans: 0 }
+        ];
+
+        // 擴充機會指令 (階段三)
+        const chanceBank = [
+            { desc: "【運動神經爆發】獲得風神加持！做出『溜直排輪加速』動作3秒！", effect: 3, type: 'move' },
+            { desc: "【泳技高超】你變成了一隻自由的魚，瞬間滑行！", effect: 2, type: 'move' },
+            { desc: "【啦啦隊應援】同學們為你歡呼！大聲唸出『多采多姿』3次。", effect: 1, type: 'move' },
+            { desc: "【靈光一閃】你突然領悟了頂針修辭的奧秘！", effect: 2, type: 'move' }
+        ];
+
+        // 擴充命運指令 (階段三)
+        const fateBank = [
+            { desc: "【腳抽筋警報】溜直排輪跌倒了！需要休息一下。", effect: -2, type: 'move' },
+            { desc: "【忘記帶蛙鏡】眼睛進水了，退回泳池邊！", effect: -1, type: 'move' },
+            { desc: "【逆風阻擋】風兒太強，讓你前進困難。", effect: -2, type: 'move' },
+            { desc: "【綁鞋帶】直排輪鞋帶鬆了，停下來重綁。", effect: -1, type: 'move' }
+        ];
+
+        // --- 遊戲狀態管理 ---
+        const boardSize = 20; // 總格數
+        let positions = [0, 0]; // 兩隊的位置
+        let currentTeam = 0; // 0=紅隊, 1=藍隊
+        let isMoving = false;
+
+        // 不重複題庫池
+        let qPool = [];
+        let cPool = [];
+        let fPool = [];
+
+        // 抽取不重複題目的輔助函數
+        function drawUniqueItem(bank, pool) {
+            // 如果題庫池空了，重新填滿並打亂
+            if (pool.length === 0) {
+                for (let i = 0; i < bank.length; i++) pool.push(i);
+                pool.sort(() => Math.random() - 0.5); // 簡單洗牌
+            }
+            // 抽出最後一題的索引
+            const idx = pool.pop();
+            return bank[idx];
+        }
+        
+        // 生成地圖配置 (S: 起點, Q: 題目, C: 機會, F: 命運, E: 終點)
+        // 確保分布均勻
+        const boardLayout = [
+            'S', 'Q', 'Q', 'C', 'Q', 
+            'F', 'Q', 'Q', 'C', 'Q', 
+            'Q', 'F', 'Q', 'Q', 'C', 
+            'Q', 'F', 'Q', 'Q', 'E'
+        ];
+
+        // --- DOM 元素 ---
+        const boardEl = document.getElementById('board');
+        const playerEls = [document.getElementById('player-0'), document.getElementById('player-1')];
+        const diceContainer = document.getElementById('dice-container');
+        const rollResult = document.getElementById('roll-result');
+        const rollBtn = document.getElementById('roll-btn');
+        const scoreEls = [document.getElementById('score-0'), document.getElementById('score-1')];
+        const controlPanel = document.getElementById('control-panel');
+        const turnIndicator = document.getElementById('turn-indicator');
+        const winnerAnnouncement = document.getElementById('winner-announcement');
+        const bgm = document.getElementById('bgm');
+        const musicBtn = document.getElementById('music-btn');
+        
+        const modal = document.getElementById('action-modal');
+        const modalIcon = document.getElementById('modal-icon');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDesc = document.getElementById('modal-desc');
+        const modalOptions = document.getElementById('modal-options');
+        const modalActionBtnContainer = document.getElementById('modal-action-btn-container');
+        const modalActionBtn = document.getElementById('modal-action-btn');
+        const feedbackMsg = document.getElementById('feedback-msg');
+        const bossModal = document.getElementById('boss-modal');
+
+        // --- 初始化地圖 ---
+        function initBoard() {
+            boardEl.innerHTML = '';
+            for (let i = 0; i < boardSize; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = `cell-${i}`;
+                
+                const numSpan = document.createElement('span');
+                numSpan.className = 'absolute top-1 left-2 text-xs text-gray-400 font-normal';
+                numSpan.textContent = i;
+                cell.appendChild(numSpan);
+
+                const typeSpan = document.createElement('span');
+                typeSpan.className = 'text-2xl sm:text-3xl';
+
+                switch(boardLayout[i]) {
+                    case 'S':
+                        cell.classList.add('cell-start');
+                        typeSpan.innerHTML = '<i class="fa-solid fa-flag text-yellow-600"></i>';
+                        typeSpan.title = '起點';
+                        break;
+                    case 'E':
+                        cell.classList.add('cell-end');
+                        typeSpan.innerHTML = '<i class="fa-solid fa-crown text-green-600"></i>';
+                        typeSpan.title = '終點';
+                        break;
+                    case 'C':
+                        cell.classList.add('cell-chance');
+                        typeSpan.innerHTML = '<i class="fa-solid fa-star text-pink-500"></i>';
+                        typeSpan.title = '機會';
+                        break;
+                    case 'F':
+                        cell.classList.add('cell-fate');
+                        typeSpan.innerHTML = '<i class="fa-solid fa-bolt text-red-500"></i>';
+                        typeSpan.title = '命運';
+                        break;
+                    case 'Q':
+                    default:
+                        cell.classList.add('cell-question');
+                        typeSpan.innerHTML = '<i class="fa-solid fa-book text-blue-400"></i>';
+                        typeSpan.title = '題目';
+                        break;
+                }
+                
+                cell.appendChild(typeSpan);
+                boardEl.appendChild(cell);
+            }
+            // 延遲更新玩家位置以確保DOM已渲染
+            setTimeout(updatePlayerPosition, 100);
+        }
+
+        function updatePlayerPosition() {
+            document.querySelectorAll('.cell').forEach(c => c.classList.remove('active'));
+            
+            for (let t = 0; t < 2; t++) {
+                const targetCell = document.getElementById(`cell-${positions[t]}`);
+                if (targetCell) {
+                    const rect = targetCell.getBoundingClientRect();
+                    const boardRect = boardEl.getBoundingClientRect();
+                    
+                    // 計算相對於 board 容器的位置
+                    let relativeLeft = rect.left - boardRect.left + (rect.width / 2) - 20;
+                    let relativeTop = rect.top - boardRect.top + (rect.height / 2) - 20;
+
+                    // 如果兩隊在同一格，稍微錯開位置以免重疊
+                    if (positions[0] === positions[1] && positions[0] !== 0) {
+                        if (t === 0) relativeLeft -= 10;
+                        if (t === 1) relativeLeft += 10;
+                    }
+
+                    playerEls[t].style.transform = `translate(${relativeLeft}px, ${relativeTop}px)`;
+                    
+                    // 標記目前隊伍所在的格子
+                    if(t === currentTeam) targetCell.classList.add('active');
+
+                    // 更新進度文字
+                    const teamName = t === 0 ? "紅隊" : "藍隊";
+                    if(positions[t] === 0) scoreEls[t].textContent = `${teamName}: 起點`;
+                    else if(positions[t] >= boardSize - 1) scoreEls[t].textContent = `${teamName}: 抵達終點！`;
+                    else scoreEls[t].textContent = `${teamName}: 第 ${positions[t]} 格`;
+                }
+            }
+        }
+
+        // 監聽視窗大小改變，重新定位玩家
+        window.addEventListener('resize', updatePlayerPosition);
+
+        // --- 核心遊戲邏輯 ---
+        function rollDice() {
+            if (isMoving) return;
+            startBgm();
+            isMoving = true;
+            rollBtn.disabled = true;
+            rollBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            const diceIcon = diceContainer.querySelector('i');
+            diceIcon.className = 'fa-solid fa-dice-d6 rolling text-gray-600';
+            rollResult.textContent = "擲骰子中...";
+
+            setTimeout(() => {
+                const steps = Math.floor(Math.random() * 6) + 1;
+                
+                // 改變骰子圖示與顏色 (依據隊伍)
+                const diceClasses = ['fa-dice-one', 'fa-dice-two', 'fa-dice-three', 'fa-dice-four', 'fa-dice-five', 'fa-dice-six'];
+                const colorClass = currentTeam === 0 ? 'text-red-500' : 'text-blue-500';
+                diceIcon.className = `fa-solid ${diceClasses[steps-1]} ${colorClass}`;
+                
+                const teamName = currentTeam === 0 ? "紅隊" : "藍隊";
+                rollResult.textContent = `${teamName} 前進 ${steps} 步！`;
+                
+                movePlayer(steps);
+            }, 600);
+        }
+
+        function movePlayer(steps) {
+            let stepCount = 0;
+            const moveInterval = setInterval(() => {
+                if (stepCount < steps && positions[currentTeam] < boardSize - 1) {
+                    positions[currentTeam]++;
+                    updatePlayerPosition();
+                    stepCount++;
+                } else {
+                    clearInterval(moveInterval);
+                    setTimeout(() => triggerCellEvent(positions[currentTeam]), 500);
+                }
+            }, 300); // 每步移動延遲
+        }
+
+        function triggerCellEvent(pos) {
+            const type = boardLayout[pos];
+            if (pos >= boardSize - 1) {
+                // 終點
+                showBossModal();
+                return;
+            }
+
+            switch(type) {
+                case 'Q':
+                    showQuestion();
+                    break;
+                case 'C':
+                    showEvent(chanceBank, 'chance');
+                    break;
+                case 'F':
+                    showEvent(fateBank, 'fate');
+                    break;
+                case 'S':
+                    endTurn();
+                    break;
+            }
+        }
+
+        function showQuestion() {
+            // 從題庫池抽取不重複題目
+            const qData = drawUniqueItem(questionBank, qPool);
+            
+            modalIcon.innerHTML = '<i class="fa-solid fa-book-open text-blue-500"></i>';
+            modalIcon.className = 'absolute -top-10 left-1/2 transform -translate-x-1/2 text-5xl bg-white rounded-full p-2 shadow-md border-4 border-blue-500';
+            modal.querySelector('.modal-content').className = 'modal-content relative border-t-8 border-blue-500';
+            modalTitle.textContent = "語文挑戰";
+            modalTitle.className = "text-2xl font-black mb-4 mt-4 text-center text-blue-700";
+            modalDesc.textContent = qData.q;
+            
+            modalOptions.innerHTML = '';
+            modalActionBtnContainer.classList.add('hidden');
+            feedbackMsg.textContent = '';
+
+            qData.options.forEach((opt, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.textContent = opt;
+                btn.onclick = () => handleAnswer(btn, index === qData.ans);
+                modalOptions.appendChild(btn);
+            });
+
+            modal.classList.add('active');
+        }
+
+        function handleAnswer(btn, isCorrect) {
+            const btns = modalOptions.querySelectorAll('button');
+            btns.forEach(b => b.disabled = true); // 鎖定選項
+
+            if (isCorrect) {
+                btn.classList.add('correct');
+                feedbackMsg.textContent = "答對了！過關！";
+                feedbackMsg.className = "text-center font-bold text-lg mt-4 h-6 text-green-600";
+                setTimeout(() => {
+                    closeModal();
+                    endTurn();
+                }, 1500);
+            } else {
+                btn.classList.add('wrong');
+                feedbackMsg.textContent = "哎呀，答錯了！停留在原地。";
+                feedbackMsg.className = "text-center font-bold text-lg mt-4 h-6 text-red-600";
+                setTimeout(() => {
+                    closeModal();
+                    endTurn();
+                }, 2000);
+            }
+        }
+
+        function showEvent(bank, type) {
+            let eData;
+            if (type === 'chance') {
+                eData = drawUniqueItem(bank, cPool);
+                modalIcon.innerHTML = '<i class="fa-solid fa-star text-pink-500"></i>';
+                modalIcon.className = 'absolute -top-10 left-1/2 transform -translate-x-1/2 text-5xl bg-white rounded-full p-2 shadow-md border-4 border-pink-500';
+                modal.querySelector('.modal-content').className = 'modal-content relative border-t-8 border-pink-500';
+                modalTitle.textContent = "機會卡";
+                modalTitle.className = "text-2xl font-black mb-4 mt-4 text-center text-pink-600";
+            } else {
+                eData = drawUniqueItem(bank, fPool);
+                modalIcon.innerHTML = '<i class="fa-solid fa-bolt text-red-500"></i>';
+                modalIcon.className = 'absolute -top-10 left-1/2 transform -translate-x-1/2 text-5xl bg-white rounded-full p-2 shadow-md border-4 border-red-500';
+                modal.querySelector('.modal-content').className = 'modal-content relative border-t-8 border-red-500';
+                modalTitle.textContent = "命運卡";
+                modalTitle.className = "text-2xl font-black mb-4 mt-4 text-center text-red-600";
+            }
+
+            modalDesc.innerHTML = `<span class="font-bold text-xl">${eData.desc}</span><br><br>系統指示：${eData.effect > 0 ? '前進' : '後退'} ${Math.abs(eData.effect)} 格`;
+            
+            modalActionBtnContainer.classList.remove('hidden');
+            
+            // 覆寫確認按鈕行為
+            modalActionBtn.onclick = () => {
+                closeModal();
+                // 執行額外移動
+                applyEffectMove(eData.effect);
+            };
+
+            modal.classList.add('active');
+        }
+
+        function applyEffectMove(effect) {
+            let newPos = positions[currentTeam] + effect;
+            if (newPos < 0) newPos = 0;
+            if (newPos >= boardSize) newPos = boardSize - 1;
+            
+            const stepDirection = effect > 0 ? 1 : -1;
+            let stepCount = 0;
+            const totalSteps = Math.abs(effect);
+
+            const moveInterval = setInterval(() => {
+                if (stepCount < totalSteps) {
+                    positions[currentTeam] += stepDirection;
+                    // 確保不越界
+                    if(positions[currentTeam] < 0) positions[currentTeam] = 0;
+                    if(positions[currentTeam] >= boardSize - 1) positions[currentTeam] = boardSize - 1;
+                    
+                    updatePlayerPosition();
+                    stepCount++;
+                } else {
+                    clearInterval(moveInterval);
+                    if (positions[currentTeam] >= boardSize - 1) {
+                         showBossModal();
+                    } else {
+                        endTurn();
+                    }
+                }
+            }, 300);
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+        }
+
+        function startBgm() {
+            if (!bgm.paused) return;
+            bgm.play().then(() => {
+                musicBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+                musicBtn.setAttribute('aria-label', '暫停背景音樂');
+            }).catch(() => {});
+        }
+
+        function toggleBgm() {
+            if (bgm.paused) {
+                startBgm();
+            } else {
+                bgm.pause();
+                musicBtn.innerHTML = '<i class="fa-solid fa-volume-xmark"></i>';
+                musicBtn.setAttribute('aria-label', '播放背景音樂');
+            }
+        }
+
+        function showBossModal() {
+            const winnerName = currentTeam === 0 ? "紅隊" : "藍隊";
+            const winnerColor = currentTeam === 0 ? "text-red-600" : "text-blue-600";
+            winnerAnnouncement.textContent = `恭喜 ${winnerName} 率先抵達終點！`;
+            winnerAnnouncement.className = `text-2xl mb-4 font-bold ${winnerColor} text-center`;
+            bossModal.classList.add('active');
+        }
+
+        function endTurn() {
+            // 切換隊伍
+            currentTeam = 1 - currentTeam; 
+            
+            isMoving = false;
+            rollBtn.disabled = false;
+            rollBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            
+            // 更新 UI 顯示
+            const teamName = currentTeam === 0 ? "紅隊" : "藍隊";
+            const btnColor = currentTeam === 0 ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600";
+            const borderColor = currentTeam === 0 ? "border-red-400" : "border-blue-400";
+            const iconColor = currentTeam === 0 ? "text-red-500" : "text-blue-500";
+            
+            turnIndicator.textContent = `現在輪到：${teamName}`;
+            rollBtn.className = `${btnColor} text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105 active:scale-95 w-full`;
+            rollBtn.textContent = `${teamName} 擲骰子前進！`;
+            controlPanel.className = `mb-6 flex flex-col items-center bg-white p-6 rounded-2xl shadow-xl w-full max-w-sm border-4 ${borderColor}`;
+            
+            rollResult.textContent = `換 ${teamName} 囉！`;
+            
+            const diceIcon = diceContainer.querySelector('i');
+            diceIcon.className = `fa-solid fa-dice-d6 ${iconColor} transition`;
+            
+            // 更新雙方高光狀態
+            updatePlayerPosition();
+        }
+
+        function finishGame() {
+            const ans = document.getElementById('boss-answer').value;
+            if(ans.trim() === '') {
+                alert('請分享一下你最喜歡的句子喔！');
+                return;
+            }
+            bossModal.classList.remove('active');
+            createConfetti();
+            
+            const winnerName = currentTeam === 0 ? "紅隊" : "藍隊";
+            const winnerColorText = currentTeam === 0 ? "text-red-600" : "text-blue-600";
+            const safeAns = ans.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            
+            // 替換主畫面內容
+            const mainContent = document.querySelector('main');
+            mainContent.innerHTML = `
+                <div class="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-lg z-10">
+                    <i class="fa-solid fa-trophy text-6xl text-yellow-500 mb-4"></i>
+                    <h2 class="text-3xl font-black ${winnerColorText} mb-4">${winnerName} 闖關成功！</h2>
+                    <p class="text-lg text-gray-700 mb-4">你們已經成為水陸小高手了！</p>
+                    <div class="bg-gray-50 p-4 rounded-xl text-left border-l-4 border-yellow-500 mb-6">
+                        <p class="text-sm text-gray-500 mb-1">你們的分享：</p>
+                        <p class="font-bold text-gray-800">「${safeAns}」</p>
+                    </div>
+                    <button onclick="location.reload()" class="bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105">
+                        再來一局
+                    </button>
+                </div>
+            `;
+        }
+
+        function createConfetti() {
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.classList.add('confetti');
+                
+                // 隨機顏色
+                const colors = ['#fce18a', '#ff726d', '#b48def', '#f4306d', '#3b82f6', '#22c55e'];
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                // 隨機位置與動畫延遲
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.top = -10 + 'px';
+                
+                document.body.appendChild(confetti);
+                
+                // 簡單動畫
+                const duration = Math.random() * 3 + 2;
+                confetti.animate([
+                    { transform: `translate3d(0,0,0) rotate(0deg)`, opacity: 1 },
+                    { transform: `translate3d(${Math.random()*200 - 100}px, 100vh, 0) rotate(${Math.random()*360}deg)`, opacity: 0 }
+                ], {
+                    duration: duration * 1000,
+                    easing: 'cubic-bezier(.37,0,.63,1)',
+                    fill: 'forwards'
+                });
+
+                // 清理 DOM
+                setTimeout(() => confetti.remove(), duration * 1000);
+            }
+        }
+
+        // 初始化
+        window.onload = () => {
+            initBoard();
+            rollResult.textContent = "準備好了嗎？點擊擲骰子！";
+        };
+    </script>
+</body>
+</html>
